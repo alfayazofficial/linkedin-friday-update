@@ -1,5 +1,5 @@
 {
-  "name": "Friday Status Report Draft",
+  "name": "Friday Status Report And LinkedIn Draft",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Every Friday 4 PM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 200]
+      "position": [
+        0,
+        200
+      ]
     },
     {
       "parameters": {
@@ -32,7 +35,10 @@
       "name": "Jira Done",
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
-      "position": [260, 80],
+      "position": [
+        260,
+        80
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -55,7 +61,10 @@
       "name": "Jira Open",
       "type": "n8n-nodes-base.jira",
       "typeVersion": 1,
-      "position": [260, 320],
+      "position": [
+        260,
+        320
+      ],
       "alwaysOutputData": true,
       "credentials": {
         "jiraSoftwareCloudApi": {
@@ -70,40 +79,81 @@
       "name": "Wait For Both",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [520, 200]
+      "position": [
+        520,
+        200
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const pick = (items) => items\n  .filter((i) => i.json && i.json.key)\n  .map((i) => {\n    const f = i.json.fields || {};\n    const labels = (f.labels || []).join(', ');\n    const status = f.status && f.status.name ? f.status.name : '';\n    const priority = f.priority && f.priority.name ? f.priority.name : '';\n    return `- ${i.json.key}: ${f.summary || ''} [status: ${status}; priority: ${priority}${labels ? '; labels: ' + labels : ''}]`;\n  });\n\nconst done = pick($('Jira Done').all());\nconst open = pick($('Jira Open').all());\n\nconst prompt = [\n  'Write my Friday status update for my manager.',\n  'Output exactly 3 lines, no greeting, no preamble, no markdown:',\n  'Done: one sentence summarising what shipped this week.',\n  'Next: one sentence on the top priorities for next week.',\n  'Blocked: one sentence on blockers, or \"Nothing blocked.\" if none.',\n  'Treat a ticket as blocked if its status or labels contain \"blocked\" or \"waiting\".',\n  'Be specific, plain, and short. Mention ticket keys only where they add clarity.',\n  '',\n  'TICKETS DONE THIS WEEK:',\n  done.length ? done.join('\\n') : '(none)',\n  '',\n  'TICKETS STILL OPEN:',\n  open.length ? open.join('\\n') : '(none)'\n].join('\\n');\n\nreturn [{ json: { prompt, doneCount: done.length, openCount: open.length } }];"
+        "jsCode": "const KEEP = ['blocked', 'waiting'];\nconst pick = (items) => items\n  .filter((i) => i.json && i.json.key)\n  .map((i) => {\n    const f = i.json.fields || {};\n    const labels = (f.labels || []);\n    const status = f.status && f.status.name ? f.status.name : '';\n    const priority = f.priority && f.priority.name ? f.priority.name : '';\n    const type = f.issuetype && f.issuetype.name ? f.issuetype.name : '';\n    const text = (status + ' ' + labels.join(' ')).toLowerCase();\n    return {\n      key: i.json.key,\n      summary: f.summary || '',\n      status, priority, type,\n      blocked: KEEP.some((k) => text.includes(k)),\n      line: `- ${i.json.key} (${type || 'Task'}): ${f.summary || ''} [status: ${status}; priority: ${priority}${labels.length ? '; labels: ' + labels.join(', ') : ''}]`\n    };\n  });\n\nconst done = pick($('Jira Done').all());\nconst open = pick($('Jira Open').all());\nconst blocked = open.filter((t) => t.blocked);\nconst highPriority = open.filter((t) => ['Highest', 'High'].includes(t.priority));\n\nconst metrics = {\n  shipped: done.length,\n  inFlight: open.length,\n  blocked: blocked.length,\n  highPriorityOpen: highPriority.length\n};\n\nconst prompt = [\n  'You write my weekly engineering/product status update.',\n  'Return ONLY a JSON object, no markdown fences, with exactly these keys:',\n  '\"manager_update\": 3 lines separated by \\\\n. Line 1 starts \"Done:\", line 2 \"Next:\", line 3 \"Blocked:\". One specific sentence each. Use \"Nothing blocked.\" if none.',\n  '\"linkedin_post\": a public Friday update post of 900-1300 characters for a senior audience (engineering leaders, founders, hiring managers). Structure: a one-line hook with a concrete outcome; \"What shipped\" with 3 short bullets (use \"-\"); \"What I learned\" with 2 sentences of real insight; \"Next week\" with one sentence; a closing question that invites experienced practitioners to reply. No hashtags spam (max 3), no emojis, no buzzwords such as \"leverage\", \"synergy\", \"game-changer\".',\n  '\"post_safety_notes\": array of strings flagging anything in the post that might be confidential (customer names, internal ticket keys, revenue, unreleased features). Empty array if clean.',\n  '',\n  'Rules: never put ticket keys, customer names or internal project names in \"linkedin_post\". Generalise them (e.g. \"the billing migration\" becomes \"a payments migration\"). Only claim outcomes the tickets support; do not invent numbers.',\n  'Treat a ticket as blocked if its status or labels contain \"blocked\" or \"waiting\".',\n  '',\n  'WEEK METRICS: shipped=' + metrics.shipped + ', in_flight=' + metrics.inFlight + ', blocked=' + metrics.blocked + ', high_priority_open=' + metrics.highPriorityOpen,\n  '',\n  'TICKETS DONE THIS WEEK:',\n  done.length ? done.map((t) => t.line).join('\\n') : '(none)',\n  '',\n  'TICKETS STILL OPEN:',\n  open.length ? open.map((t) => t.line).join('\\n') : '(none)'\n].join('\\n');\n\nreturn [{ json: { prompt, metrics } }];"
       },
       "id": "a1b2c3d4-0005-4000-8000-000000000005",
       "name": "Build Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [780, 200]
+      "position": [
+        780,
+        200
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "x-api-key", "value": "YOURKEY" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 400, messages: [{ role: 'user', content: $json.prompt }] }) }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1500, messages: [{ role: 'user', content: $json.prompt }] }) }}",
+        "options": {
+          "timeout": 60000,
+          "retry": {}
+        }
       },
       "id": "a1b2c3d4-0006-4000-8000-000000000006",
-      "name": "Claude Write Update",
+      "name": "AI Write Update",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1040, 200]
+      "position": [
+        1040,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Anthropic API key (header x-api-key)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.content && $json.content[0] && $json.content[0].text) || '';\nconst metrics = $('Build Prompt').first().json.metrics;\nlet out;\ntry {\n  const cleaned = raw.replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n  out = JSON.parse(cleaned);\n} catch (e) {\n  out = { manager_update: raw.trim() || 'Done: (none)\\nNext: (none)\\nBlocked: Nothing blocked.', linkedin_post: '', post_safety_notes: ['Model output was not valid JSON. Review manually.'] };\n}\n\nconst notes = Array.isArray(out.post_safety_notes) ? out.post_safety_notes : [];\nconst post = (out.linkedin_post || '').trim();\nconst review = [\n  'REVIEW BEFORE POSTING',\n  '- Confirm nothing is confidential or unreleased.',\n  '- Characters: ' + post.length + ' (LinkedIn limit 3000, sweet spot 900-1300).',\n  notes.length ? '- Flags from the drafter:\\n  * ' + notes.join('\\n  * ') : '- No flags raised, still read it once.',\n  '',\n  '---',\n  ''\n].join('\\n');\n\nreturn [{ json: {\n  managerUpdate: (out.manager_update || '').trim(),\n  linkedinDraft: review + post,\n  metrics\n} }];"
+      },
+      "id": "a1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Parse And Review Checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        200
+      ]
     },
     {
       "parameters": {
@@ -111,16 +161,45 @@
         "operation": "create",
         "subject": "Friday update",
         "emailType": "text",
-        "message": "={{ $json.content[0].text }}",
+        "message": "={{ $json.managerUpdate }}",
         "options": {
           "sendTo": "YOUR_MANAGER@example.com"
         }
       },
-      "id": "a1b2c3d4-0007-4000-8000-000000000007",
-      "name": "Gmail Draft",
+      "id": "a1b2c3d4-0008-4000-8000-000000000008",
+      "name": "Gmail Draft To Manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [1300, 200],
+      "position": [
+        1560,
+        80
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_ME",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "LinkedIn Friday post (review before posting)",
+        "emailType": "text",
+        "message": "={{ $json.linkedinDraft }}",
+        "options": {
+          "sendTo": "YOU@example.com"
+        }
+      },
+      "id": "a1b2c3d4-0009-4000-8000-000000000009",
+      "name": "Gmail Draft LinkedIn Post",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        320
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "REPLACE_ME",
@@ -133,29 +212,97 @@
     "Every Friday 4 PM": {
       "main": [
         [
-          { "node": "Jira Done", "type": "main", "index": 0 },
-          { "node": "Jira Open", "type": "main", "index": 0 }
+          {
+            "node": "Jira Done",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Jira Open",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Jira Done": {
-      "main": [[{ "node": "Wait For Both", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Wait For Both",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Jira Open": {
-      "main": [[{ "node": "Wait For Both", "type": "main", "index": 1 }]]
+      "main": [
+        [
+          {
+            "node": "Wait For Both",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
     },
     "Wait For Both": {
-      "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Prompt": {
-      "main": [[{ "node": "Claude Write Update", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "AI Write Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Claude Write Update": {
-      "main": [[{ "node": "Gmail Draft", "type": "main", "index": 0 }]]
+    "AI Write Update": {
+      "main": [
+        [
+          {
+            "node": "Parse And Review Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse And Review Checks": {
+      "main": [
+        [
+          {
+            "node": "Gmail Draft To Manager",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail Draft LinkedIn Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {},
-  "meta": { "templateCredsSetupCompleted": false }
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
 }
